@@ -1,121 +1,96 @@
-// This is a bot that forwards messages to a group chat
-// It is deployed on AWS Lambda and uses the serverless framework
-// It uses the telegraf library to interact with the Telegram Bot API
-// It is triggered by an API Gateway event
-
-// Don't forget import the required libraries
-// and replace "Rising Flare" with the name of the group chat 🙃 
-
-
 const { Telegraf } = require('telegraf')
 const { message } = require('telegraf/filters')
 const dotenv = require('dotenv')
+const fs = require('fs')
 
 dotenv.config()
+
 const bot = new Telegraf(process.env.BOT_TOKEN)
+const TOPIC_ID = parseInt(process.env.TOPIC_ID)
+const ADMINS = process.env.ADMINS.split(',').map(id => parseInt(id.trim()))
+const STATUS_FILE = './status.json'
 
-// bot.start((ctx) => ctx.reply('Welcome'))
+// --- Bot toggle logic ---
+function isBotEnabled() {
+    try {
+        const data = fs.readFileSync(STATUS_FILE)
+        return JSON.parse(data).enabled
+    } catch (e) {
+        return false
+    }
+}
 
+function setBotEnabled(state) {
+    fs.writeFileSync(STATUS_FILE, JSON.stringify({ enabled: state }, null, 2))
+}
+
+// --- Commands ---
+bot.command('on', (ctx) => {
+    if (!ADMINS.includes(ctx.from.id)) return ctx.reply('❌ You are not authorized.')
+    setBotEnabled(true)
+    ctx.reply('✅ Bot is now *enabled*.', { parse_mode: 'Markdown' })
+})
+
+bot.command('off', (ctx) => {
+    if (!ADMINS.includes(ctx.from.id)) return ctx.reply('❌ You are not authorized.')
+    setBotEnabled(false)
+    ctx.reply('🛑 Bot is now *disabled*.', { parse_mode: 'Markdown' })
+})
+
+bot.command('status', (ctx) => {
+    const status = isBotEnabled() ? '🟢 Enabled' : '🔴 Disabled'
+    ctx.reply(`Current bot status: *${status}*`, { parse_mode: 'Markdown' })
+})
+
+// --- Start/help/filters ---
 bot.start(async ctx => {
-    return ctx.reply("Hi, this is *Cosmic Flare*, which will anonymously forward your text to Rising Flare. \nSimply start typing...", {
+    return ctx.reply("Hi, this is *Wingtip Anonymous Messaging Bot*, which will anonymously forward your text to BJA. \nSimply start typing...", {
         parse_mode: "Markdown",
         reply_to_message_id: ctx.message?.message_id,
         allow_sending_without_reply: true,
         reply_markup: { force_reply: true, selective: true }
     })
-
 })
 
-bot.help((ctx) => ctx.reply('Send me any messages to forward 🙃.'))
-
+bot.help((ctx) => ctx.reply('Send me any *textual* messages to forward 🙃.', { parse_mode: 'Markdown' }))
 bot.on(message('sticker'), (ctx) => {
     if (ctx.message.chat.type !== 'private') return
     ctx.reply('Please use emoji 🙃')
 })
 
-// bot.hears('hi', (ctx) => ctx.reply('Hey there'))
+// --- Core message forwarding ---
+bot.on(message('text'), async (ctx) => {
+    if (ctx.message.chat.type !== 'private') return
+    if (!isBotEnabled()) return ctx.reply('🛑 Bot is currently *disabled*.', { parse_mode: 'Markdown' })
+    ctx.reply('Your message has been sent to BJA. Have a great day! 🙃')
+    return ctx.telegram.sendMessage(process.env.GROUP_ID, ctx.message.text, {
+        message_thread_id: TOPIC_ID
+    })
+})
 
-// Enable graceful stop
+// --- Reject non-text messages ---
+const rejectMedia = async (ctx) => {
+    if (ctx.message.chat.type !== 'private') return
+    ctx.reply('Please send textual messages only!')
+}
+
+bot.on(message('photo'), rejectMedia)
+bot.on(message('video'), rejectMedia)
+bot.on(message('voice'), rejectMedia)
+bot.on(message('audio'), rejectMedia)
+bot.on(message('document'), rejectMedia)
+bot.on(message('animation'), rejectMedia)
+bot.on(message('contact'), rejectMedia)
+bot.on(message('location'), rejectMedia)
+
+// --- Graceful stop ---
 process.once('SIGINT', () => bot.stop('SIGINT'))
 process.once('SIGTERM', () => bot.stop('SIGTERM'))
 
-bot.on(message('text'), async (ctx) => {
-    // do nothing if bot is on a group
-    if (ctx.message.chat.type !== 'private') return
-    // reply to a group chat message (GROUP_ID)
-    ctx.reply('Your message has been sent to Rising Flare. Have a great day! 🙃')
-    return ctx.telegram.sendMessage(process.env.GROUP_ID, ctx.message.text)
-})
-
-bot.on(message('photo'), async (ctx) => {
-    // do nothing if bot is on a group
-    if (ctx.message.chat.type !== 'private') return
-    // reply to a group chat message (GROUP_ID)
-    ctx.reply('Your message has been sent to Rising Flare. Have a great day! 🙃')
-    return ctx.telegram.sendPhoto(process.env.GROUP_ID, ctx.message.photo[0].file_id)
-})
-
-bot.on(message('video'), async (ctx) => {
-    // do nothing if bot is on a group
-    if (ctx.message.chat.type !== 'private') return
-    // reply to a group chat message (GROUP_ID)
-    ctx.reply('Your message has been sent to Rising Flare. Have a great day! 🙃')
-    return ctx.telegram.sendVideo(process.env.GROUP_ID, ctx.message.video.file_id)
-})
-
-bot.on(message('voice'), async (ctx) => {
-    // do nothing if bot is on a group
-    if (ctx.message.chat.type !== 'private') return
-    // reply to a group chat message (GROUP_ID)
-    ctx.reply('Your message has been sent to Rising Flare. Have a great day! 🙃')
-    return ctx.telegram.sendVoice(process.env.GROUP_ID, ctx.message.voice.file_id)
-})
-
-bot.on(message('audio'), async (ctx) => {
-    // do nothing if bot is on a group
-    if (ctx.message.chat.type !== 'private') return
-    // reply to a group chat message (GROUP_ID)
-    ctx.reply('Your message has been sent to Rising Flare. Have a great day! 🙃')
-    return ctx.telegram.sendAudio(process.env.GROUP_ID, ctx.message.audio.file_id)
-})
-
-bot.on(message('document'), async (ctx) => {
-    // do nothing if bot is on a group
-    if (ctx.message.chat.type !== 'private') return
-    // reply to a group chat message (GROUP_ID)
-    ctx.reply('Your message has been sent to Rising Flare. Have a great day! 🙃')
-    return ctx.telegram.sendDocument(process.env.GROUP_ID, ctx.message.document.file_id)
-})
-
-bot.on(message('animation'), async (ctx) => {
-    // do nothing if bot is on a group
-    if (ctx.message.chat.type !== 'private') return
-    // reply to a group chat message (GROUP_ID)
-    ctx.reply('Your message has been sent to Rising Flare. Have a great day! 🙃')
-    return ctx.telegram.sendAnimation(process.env.GROUP_ID, ctx.message.animation.file_id)
-})
-
-bot.on(message('contact'), async (ctx) => {
-    // do nothing if bot is on a group
-    if (ctx.message.chat.type !== 'private') return
-    // reply to a group chat message (GROUP_ID)
-    ctx.reply('Your message has been sent to Rising Flare. Have a great day! 🙃')
-    return ctx.telegram.sendContact(process.env.GROUP_ID, ctx.message.contact.phone_number, ctx.message.contact.first_name)
-})
-
-bot.on(message('location'), async (ctx) => {
-    // do nothing if bot is on a group
-    if (ctx.message.chat.type !== 'private') return
-    // reply to a group chat message (GROUP_ID)
-    ctx.reply('Your message has been sent to Rising Flare. Have a great day! 🙃')
-    return ctx.telegram.sendLocation(process.env.GROUP_ID, ctx.message.location.latitude, ctx.message.location.longitude)
-})
-
 console.log('Bot is running')
 
-exports.bot = bot;
-
-// AWS event handler syntax (https://docs.aws.amazon.com/lambda/latest/dg/nodejs-handler.html)
+// --- AWS Lambda handler ---
+exports.bot = bot
 exports.handler = async event => {
     try {
         await bot.handleUpdate(JSON.parse(event.body))
