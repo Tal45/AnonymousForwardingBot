@@ -1,27 +1,22 @@
 const { Telegraf } = require('telegraf')
 const { message } = require('telegraf/filters')
 const dotenv = require('dotenv')
-const fs = require('fs')
 
 dotenv.config()
 
 const bot = new Telegraf(process.env.BOT_TOKEN)
 const TOPIC_ID = parseInt(process.env.TOPIC_ID)
 const ADMINS = process.env.ADMINS.split(',').map(id => parseInt(id.trim()))
-const STATUS_FILE = './status.json'
 
-// --- Bot toggle logic ---
+// --- Bot toggle logic (in-memory, resets on cold start) ---
+let botEnabled = true
+
 function isBotEnabled() {
-    try {
-        const data = fs.readFileSync(STATUS_FILE)
-        return JSON.parse(data).enabled
-    } catch (e) {
-        return false
-    }
+    return botEnabled
 }
 
 function setBotEnabled(state) {
-    fs.writeFileSync(STATUS_FILE, JSON.stringify({ enabled: state }, null, 2))
+    botEnabled = state
 }
 
 // --- Commands ---
@@ -89,7 +84,7 @@ process.once('SIGTERM', () => bot.stop('SIGTERM'))
 
 console.log('Bot is running')
 
-// --- AWS Lambda handler ---
+// --- Netlify Function handler ---
 exports.bot = bot
 exports.handler = async event => {
     try {
