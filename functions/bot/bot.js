@@ -61,7 +61,7 @@ bot.command('status', async (ctx) => {
 
 // --- Start/help/filters ---
 bot.start(async ctx => {
-    return ctx.reply("Hi, this is *Wingtip Anonymous Messaging Bot*, which will anonymously forward your text to BJA. \nSimply start typing...", {
+    return ctx.reply("Hi, this is *BJA Anonymous Messaging Bot*, which will anonymously forward your text to BJA. \nSimply start typing...", {
         parse_mode: "Markdown",
         reply_to_message_id: ctx.message?.message_id,
         allow_sending_without_reply: true,
