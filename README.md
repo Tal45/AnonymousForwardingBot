@@ -4,7 +4,7 @@ This is a simple Telegram bot built with Node.js that forwards all its messages 
 
 ![AnonymousForwardingBot](https://socialify.git.ci/SharafatKarim/AnonymousForwardingBot/image?description=1&descriptionEditable=Telegram%20anonymous%20text%20forwarding%20bot&font=Source%20Code%20Pro&forks=1&issues=1&language=1&name=1&owner=1&pattern=Floating%20Cogs&pulls=1&stargazers=1&theme=Auto)
 
-> The bot can be hosted on Netlify and is free to use forever in this case. To set up the bot, you only need to configure two environment variables: `BOT_TOKEN` and `GROUP_ID`.
+> The bot can be hosted on Netlify and is free to use forever in this case. Configuration is done through a `.env` file. See `.env.sample` for all supported variables.
 
 ## Prerequisites
 
@@ -34,14 +34,33 @@ cd AnonymousForwardingBot
 npm i
 ```
 
-4. Create a `.env` file in the project root directory and set the following environment variables:
+4. Create a `.env` file in the project root directory. The `.env.sample` file
+   included in this repository shows every supported variable:
 
 ```env
 BOT_TOKEN=XXXXXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 GROUP_ID=-XXXXXXXXX
+TOPIC_ID=X
+ADMINS=XXXXXXXXX,XXXXXXXXX,XXXXXXXXX
+SUPABASE_URL=
+SUPABASE_KEY=
+SUPABASE_TABLE=
+SUPABASE_KEY_NAME=enabled
 ```
 
-Replace `BOT_TOKEN` and `GROUP_ID` with the actual values you obtained from your Telegram bot and group.
+Replace each variable with the appropriate value from your Telegram bot, group
+and Supabase project.
+
+**Environment variables explained:**
+
+- `BOT_TOKEN` – API token provided by [BotFather](https://core.telegram.org/bots#botfather).
+- `GROUP_ID` – ID of the group or channel where messages will be forwarded.
+- `TOPIC_ID` – thread identifier inside the target group (if using topics).
+- `ADMINS` – comma separated list of Telegram user IDs allowed to control the bot.
+- `SUPABASE_URL` – your Supabase project URL used for feature toggling.
+- `SUPABASE_KEY` – service key for the Supabase project.
+- `SUPABASE_TABLE` – table storing the toggle state.
+- `SUPABASE_KEY_NAME` – key column value indicating whether the bot is enabled.
 
 5. And finally, deploy the bot in your local machine using the following command.
 
@@ -51,11 +70,18 @@ node index.js
 
 ## Netlify Setup
 
-Deploy to Netlify by linking to this repository. And don't forget to fill in the environment variables on netlify.
+Deploy to Netlify by linking to this repository. Set the same environment
+variables on Netlify:
 
 ```env
 BOT_TOKEN=XXXXXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 GROUP_ID=-XXXXXXXXX
+TOPIC_ID=X
+ADMINS=XXXXXXXXX,XXXXXXXXX,XXXXXXXXX
+SUPABASE_URL=
+SUPABASE_KEY=
+SUPABASE_TABLE=
+SUPABASE_KEY_NAME=enabled
 ```
 Thereafter, you need to specify and tell telegram where your bot should direct the messages it received to. Do so by simply visiting this url (without the {, })
 
@@ -96,6 +122,15 @@ Now that your bot is deployed and ready, follow these steps to start forwarding 
 2. Make your bot an administrator of the group to ensure it has the necessary permissions to forward messages.
 
 3. Start a chat with your bot, and you can start sending messages to the bot. The bot will automatically forward these messages to the group without revealing the sender's identity.
+
+## Admin Commands
+
+The bot can be toggled on or off by the Telegram users listed in the `ADMINS`
+environment variable:
+
+- `/on` &ndash; enable message forwarding.
+- `/off` &ndash; disable the bot so incoming messages are ignored.
+- `/status` &ndash; reply with the current enabled/disabled state.
 
 ## Important Notes
 
