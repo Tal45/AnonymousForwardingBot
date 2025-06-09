@@ -89,30 +89,22 @@ bot.command('links', async (ctx) => {
 📌 *בחרו קבוצה להצטרפות מהכפתורים למטה:*
 `;
 
-    const LINKS_TOPIC_ID = parseInt(process.env.LINKS_TOPIC_ID);
+    const CHANNEL_ID = parseInt(process.env.CHANNEL_ID);
 
-    await ctx.telegram.sendMessage(process.env.GROUP_ID, messageText, {
+    await ctx.telegram.sendMessage(CHANNEL_ID, messageText, {
         parse_mode: 'Markdown',
-        message_thread_id: LINKS_TOPIC_ID,
         reply_markup: {
             inline_keyboard: [
-                [
-                    { text: '🛋️ Lounge', url: 'https://t.me/+V2SBxQBz0Z9hOWQ0' }
-                ],
-                [
-                    { text: '✈️ Commercial Aviation', url: 'https://t.me/+OszqxsBH8vY0NjBk' }
-                ],
-                [
-                    { text: '🧑‍🏫 Flight Instructors', url: 'https://t.me/+swR-eigAntViN2I0' }
-                ],
-                [
-                    { text: '👨‍✈️ Cadet Pilots', url: 'https://t.me/+8ynMfyN0zzZlNDlk' }
-                ]
+                [{ text: '🛋️ Lounge', url: 'https://t.me/+V2SBxQBz0Z9hOWQ0' }],
+                [{ text: '✈️ Commercial Aviation', url: 'https://t.me/+OszqxsBH8vY0NjBk' }],
+                [{ text: '🧑‍🏫 Flight Instructors', url: 'https://t.me/+swR-eigAntViN2I0' }],
+                [{ text: '👨‍✈️ Cadet Pilots', url: 'https://t.me/+8ynMfyN0zzZlNDlk' }]
             ]
         }
-    });
+});
 
-    ctx.reply('✅ Links posted to the group.');
+
+    ctx.reply('✅ Links posted to the Blue Jay Aviation Channel!.');
 });
 
 
