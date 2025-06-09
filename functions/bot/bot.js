@@ -59,6 +59,63 @@ bot.command('status', async (ctx) => {
     ctx.reply(`Current bot status: *${status}*`, { parse_mode: 'Markdown' });
 });
 
+bot.command('links', async (ctx) => {
+    if (!ADMINS.includes(ctx.from.id)) {
+        return ctx.reply('❌ You are not authorized to use this command.');
+    }
+
+    const messageText = `
+ברוכים הבאים לערוץ *Blue Jay Aviation* - קורת הגג של הטייסים הישראלים! ✈️
+
+בערוץ תוכלו לצפות בהודעות בצורה מסודרת ומרוכזת, כמו כן גם להיכנס לשאר הקבוצות הרלוונטיות.
+
+⚠️ *שימו לב!*  
+לכל קבוצה יצטרך להתבצע אישור ע״י אחד מהאדמינים *(נעמי / מאור)* אשר יכלול שאלון כדי לוודא שאינכם בוט, שפרטיותכם נשמרת ושהקבוצה תשאר מקצועית.
+
+📌 *הקבוצות שלנו:*
+
+🔹 *Lounge*  
+כאן הכל קורה - טיפים מקצועיים, נושאים חמים בתעופה ודיונים פתוחים.
+
+🔹 *Commercial Aviation*  
+דיונים מקצועיים עבור טייסי איירליין, קרגו וביזנס ג'ט.
+
+🔹 *Flight Instructors*  
+קבוצה למדריכי טיס וחניכי הדרכה.
+
+🔹 *Cadet Pilots*  
+קבוצה לטייסים אשר התחילו את דרכם המקצועית, מהלימודים ועד סיום ליין טריינינג.
+
+📌 *בחרו קבוצה להצטרפות מהכפתורים למטה:*
+`;
+
+    const LINKS_TOPIC_ID = parseInt(process.env.LINKS_TOPIC_ID);
+
+    await ctx.telegram.sendMessage(process.env.GROUP_ID, messageText, {
+        parse_mode: 'Markdown',
+        message_thread_id: LINKS_TOPIC_ID,
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    { text: '🛋️ Lounge', url: 'https://t.me/+V2SBxQBz0Z9hOWQ0' }
+                ],
+                [
+                    { text: '✈️ Commercial Aviation', url: 'https://t.me/+OszqxsBH8vY0NjBk' }
+                ],
+                [
+                    { text: '🧑‍🏫 Flight Instructors', url: 'https://t.me/+swR-eigAntViN2I0' }
+                ],
+                [
+                    { text: '👨‍✈️ Cadet Pilots', url: 'https://t.me/+8ynMfyN0zzZlNDlk' }
+                ]
+            ]
+        }
+    });
+
+    ctx.reply('✅ Links posted to the group.');
+});
+
+
 // --- Start/help/filters ---
 bot.start(async ctx => {
     return ctx.reply("Hi, this is *BJA Anonymous Messaging Bot*, which will anonymously forward your text to BJA. \nSimply start typing...", {
