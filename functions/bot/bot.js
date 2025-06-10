@@ -59,6 +59,31 @@ bot.command('status', async (ctx) => {
     ctx.reply(`Current bot status: *${status}*`, { parse_mode: 'Markdown' });
 });
 
+
+bot.command('ban', async (ctx) => {
+    if (!ADMINS.includes(ctx.from.id)) {
+        return ctx.reply('❌ You are not authorized to use this command.');
+    }
+
+    const parts = ctx.message.text.split(' ');
+    const targetId = parseInt(parts[1]);
+
+    if (isNaN(targetId)) {
+        return ctx.reply('⚠️ Usage: /ban <user_id>');
+    }
+
+    const { error } = await supabase
+        .from('blacklist')
+        .upsert([{ user_id: targetId }]);
+
+    if (error) {
+        console.error("Supabase ban error:", error.message);
+        return ctx.reply('❌ Failed to ban the user.');
+    }
+
+    ctx.reply(`✅ User ${targetId} has been banned.`);
+});
+
 bot.command('links', async (ctx) => {
     if (!ADMINS.includes(ctx.from.id)) {
         return ctx.reply('❌ You are not authorized to use this command.');
@@ -110,7 +135,7 @@ bot.command('links', async (ctx) => {
 
 // --- Start/help/filters ---
 bot.start(async ctx => {
-    return ctx.reply("Hi, this is *BJA Anonymous Messaging Bot*, which will anonymously forward your text to BJA. \nSimply start typing...", {
+    return ctx.reply("Hi, this is *BJA Anonymous Messaging Bot*, which will anonymously forward your text to BJA. \nSimply start typing...\n\n⚠️ Warning: This bot is actively monitored. Misuse — including spam, offensive language, or abuse — will result in permanent removal and blocking of the user. Please use responsibly.", {
         parse_mode: "Markdown",
         reply_to_message_id: ctx.message?.message_id,
         allow_sending_without_reply: true,
@@ -127,14 +152,48 @@ bot.on(message('sticker'), (ctx) => {
 // --- Message forwarding ---
 bot.on(message('text'), async (ctx) => {
     if (ctx.message.chat.type !== 'private') return;
-    const enabled = await isBotEnabled();
-    if (!enabled) return ctx.reply('🛑 Bot is currently *disabled*.', { parse_mode: 'Markdown' });
 
+    const enabled = await isBotEnabled();
+    if (!enabled) {
+        return ctx.reply('🛑 Bot is currently *disabled*.', { parse_mode: 'Markdown' });
+    }
+
+    const { id: user_id, username } = ctx.from;
+    const message = ctx.message.text;
+
+    // 🔒 Ban check BEFORE logging or forwarding
+    const { data: bannedUser, error: banCheckError } = await supabase
+        .from('blacklist')
+        .select('user_id')
+        .eq('user_id', user_id)
+        .maybeSingle();
+
+    if (banCheckError) {
+        console.error("Ban check failed:", banCheckError.message);
+        return ctx.reply('⚠️ Error checking access. Please try again later.');
+    }
+
+    if (bannedUser) {
+        return ctx.reply('🚫 You are banned from using this bot.');
+    }
+
+    // 1. Log to Supabase
+    const { error } = await supabase
+        .from('messages')
+        .insert([{ user_id, username, message }]);
+
+    if (error) {
+        console.error("Supabase insert error:", error.message);
+        return ctx.reply('⚠️ Failed to log your message. Please try again later.');
+    }
+
+    // 2. Acknowledge + forward
     ctx.reply('Your message has been sent to BJA. Have a great day! 🙃');
-    return ctx.telegram.sendMessage(process.env.GROUP_ID, ctx.message.text, {
+    return ctx.telegram.sendMessage(process.env.GROUP_ID, message, {
         message_thread_id: TOPIC_ID
     });
 });
+
 
 // --- Reject non-text messages ---
 const rejectMedia = async (ctx) => {
