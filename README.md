@@ -123,6 +123,8 @@ Now that your bot is deployed and ready, follow these steps to start forwarding 
 
 3. Start a chat with your bot, and you can start sending messages to the bot. The bot will automatically forward these messages to the group without revealing the sender's identity.
 
+4. All incoming messages are stored in Supabase for moderation purposes. Misuse may lead to a ban.
+
 ## Admin Commands
 
 The bot can be toggled on or off by the Telegram users listed in the `ADMINS`
@@ -131,10 +133,14 @@ environment variable:
 - `/on` &ndash; enable message forwarding.
 - `/off` &ndash; disable the bot so incoming messages are ignored.
 - `/status` &ndash; reply with the current enabled/disabled state.
+- `/fetch` &ndash; list the last 5 logged messages.
+- `/clean` &ndash; remove all logged messages.
+- `/ban <user_id>` &ndash; block a user from using the bot.
 
 ## Important Notes
 
 - The Telegram Anonymous Forwarding Bot is designed to maintain the privacy of your users. It forwards messages without disclosing the original sender's identity.
+- All messages are logged to Supabase so administrators can monitor and block abuse.
 
 - Remember to keep your `BOT_TOKEN` and `GROUP_ID` environment variables secret. Do not expose them in public repositories or share them with unauthorized users.
 
