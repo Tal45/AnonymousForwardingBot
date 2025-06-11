@@ -59,6 +59,53 @@ bot.command('status', async (ctx) => {
     ctx.reply(`Current bot status: *${status}*`, { parse_mode: 'Markdown' });
 });
 
+bot.command('clean', async (ctx) => {
+    if (!ADMINS.includes(ctx.from.id)) {
+        return ctx.reply('❌ You are not authorized to use this command.');
+    }
+
+    const { data, error } = await supabase
+        .from('messages')
+        .delete()
+        .not('id', 'is', null)
+        .select();
+
+    if (error) {
+        console.error("Supabase delete error:", error.message);
+        return ctx.reply('⚠️ Failed to clean the messages table.');
+    }
+
+    const deletedCount = data?.length || 0;
+    ctx.reply(`🧹 Successfully deleted ${deletedCount} message(s) from the table.`);
+});
+
+bot.command('fetch', async (ctx) => {
+    if (!ADMINS.includes(ctx.from.id)) {
+        return ctx.reply('❌ You are not authorized to use this command.');
+    }
+
+    const { data, error } = await supabase
+        .from('messages')
+        .select('user_id, username, message, created_at')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+    if (error) {
+        console.error("Supabase fetch error:", error.message);
+        return ctx.reply('⚠️ Failed to fetch messages.');
+    }
+
+    if (!data || data.length === 0) {
+        return ctx.reply('📭 No messages found.');
+    }
+
+    const formatted = data.map((row, i) => 
+        `#${i + 1} - ${row.username || 'Unknown'} (${row.user_id}):\n${row.message}`
+    ).join('\n\n');
+
+    ctx.reply(`📝 Last 5 messages:\n\n${formatted}`);
+});
+
 
 bot.command('ban', async (ctx) => {
     if (!ADMINS.includes(ctx.from.id)) {
