@@ -179,6 +179,37 @@ bot.command('links', async (ctx) => {
     ctx.reply('✅ Links posted to the Blue Jay Aviation Channel!.');
 });
 
+// --- Feedback Functionality --- 
+bot.command('feedback', async (ctx) => {
+  const feedback = ctx.message.text.split(' ').slice(1).join(' ').trim();
+
+  if (!feedback) {
+    return ctx.reply('❗ Please provide feedback after the command. Example:\n/feedback This bot is awesome!');
+  }
+
+  try {
+    const user = ctx.from;
+    const now = new Date();
+    const dateStr = now.toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem' });
+
+    const formattedFeedback = `📝 *New Feedback Received*
+
+👤 From: ${user.first_name} (${user.username ? '@' + user.username : 'No username'})
+🆔 ID: ${user.id}
+🕒 Date: ${dateStr}
+
+💬 "${feedback}"`;
+
+    await ctx.telegram.sendMessage(process.env.FEEDBACK_CHANNEL_ID, formattedFeedback, {
+      parse_mode: 'Markdown',
+    });
+
+    ctx.reply('✅ Thank you! Your feedback has been submitted.');
+  } catch (err) {
+    console.error('Error sending feedback:', err);
+    ctx.reply('⚠️ An error occurred while sending your feedback. Please try again later.');
+  }
+});
 
 // --- Start/help/filters ---
 bot.start(async ctx => {
@@ -235,7 +266,7 @@ bot.on(message('text'), async (ctx) => {
     }
 
     // 2. Acknowledge + forward
-    ctx.reply('Your message has been sent to BJA. Have a great day! 🙃');
+    ctx.reply('Your message has been sent to BJA. Have a great day! 🙃\n\nWe’d love to hear your thoughts — feel free to send us feedback anytime using:\n/feedback <your message>');
     return ctx.telegram.sendMessage(process.env.GROUP_ID, message, {
         message_thread_id: TOPIC_ID
     });
