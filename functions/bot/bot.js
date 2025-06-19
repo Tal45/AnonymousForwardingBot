@@ -1,4 +1,5 @@
 const { Telegraf } = require('telegraf');
+const { session } = require('telegraf');
 const { message } = require('telegraf/filters');
 const { createClient } = require('@supabase/supabase-js');
 const dotenv = require('dotenv');
@@ -6,14 +7,44 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
+bot.use(session());
+
 const TOPIC_ID = parseInt(process.env.TOPIC_ID);
 const ADMINS = process.env.ADMINS.split(',').map(id => parseInt(id.trim()));
+const FEEDBACK_CHANNEL_ID = process.env.FEEDBACK_CHANNEL_ID;
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 const SUPA_TABLE = process.env.SUPABASE_TABLE;
 const SUPA_KEY = process.env.SUPABASE_KEY_NAME;
 
-// --- Supabase-based toggle ---
+function getMainMenu() {
+    return {
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: '✉️ Send Anonymous Message', callback_data: 'anon' }],
+                [{ text: '🗣️ Send Feedback', callback_data: 'feedback' }],
+                [{ text: '⚙️ Admin Panel', callback_data: 'admin' }]
+            ]
+        }
+    };
+}
+
+function getAdminPanel() {
+    return {
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: '🔄 On', callback_data: 'admin_on' }, { text: '⛔ Off', callback_data: 'admin_off' }],
+                [{ text: '📊 Status', callback_data: 'admin_status' }],
+                [{ text: '📥 Fetch', callback_data: 'admin_fetch' }, { text: '🧹 Clean', callback_data: 'admin_clean' }],
+                [{ text: '🚫 Ban user', callback_data: 'admin_ban' }],
+                [{ text: '🔗 Links', callback_data: 'admin_links' }],
+                [{ text: '🔙 Back to Main Menu', callback_data: 'back_to_main' }]
+            ]
+        }
+    };
+}
+
+
 async function isBotEnabled() {
     const { data, error } = await supabase
         .from(SUPA_TABLE)
@@ -40,103 +71,72 @@ async function setBotEnabled(state) {
     }
 }
 
-// --- Admin commands ---
-bot.command('on', async (ctx) => {
+bot.on('callback_query', async (ctx) => {
+    const action = ctx.callbackQuery.data;
+
+    if (action === 'anon' || action === 'feedback') {
+        ctx.session = ctx.session || {};
+        ctx.session.mode = action;
+        const prompt = action === 'anon' ? '📝 Please type your anonymous message:\n\n⚠️ Warning: This bot is actively monitored. Misuse — including spam, offensive language, or abuse — will result in permanent removal and blocking of the user. Please use responsibly.' : '💬 Please leave your feedback:';
+        return ctx.reply(prompt);
+    }
+
+    if (action === 'admin') {
+        if (!ADMINS.includes(ctx.from.id)) return ctx.reply('❌ You are not authorized.');
+        return ctx.reply('🔧 Admin Panel:', getAdminPanel());
+    }
+    if (action === 'back_to_main') {
+        ctx.session = {};
+        return ctx.reply('Please choose an option from the menu to proceed:', getMainMenu());
+    }
+
     if (!ADMINS.includes(ctx.from.id)) return ctx.reply('❌ You are not authorized.');
-    await setBotEnabled(true);
-    ctx.reply('✅ Bot is now *enabled*.', { parse_mode: 'Markdown' });
-});
 
-bot.command('off', async (ctx) => {
-    if (!ADMINS.includes(ctx.from.id)) return ctx.reply('❌ You are not authorized.');
-    await setBotEnabled(false);
-    ctx.reply('🛑 Bot is now *disabled*.', { parse_mode: 'Markdown' });
-});
+    switch (action) {
+        case 'admin_on':
+            await setBotEnabled(true);
+            return ctx.reply('✅ Bot is now *enabled*.', { parse_mode: 'Markdown' });
+        case 'admin_off':
+            await setBotEnabled(false);
+            return ctx.reply('🛑 Bot is now *disabled*.', { parse_mode: 'Markdown' });
+        case 'admin_status': {
+            const enabled = await isBotEnabled();
+            const status = enabled ? '🟢 Enabled' : '🔴 Disabled';
+            return ctx.reply(`Current bot status: *${status}*`, { parse_mode: 'Markdown' });
+        }
+        case 'admin_fetch': {
+            const { data, error } = await supabase
+                .from('messages')
+                .select('user_id, username, message, created_at')
+                .order('created_at', { ascending: false })
+                .limit(5);
 
-bot.command('status', async (ctx) => {
-    const enabled = await isBotEnabled();
-    const status = enabled ? '🟢 Enabled' : '🔴 Disabled';
-    ctx.reply(`Current bot status: *${status}*`, { parse_mode: 'Markdown' });
-});
+            if (error || !data || data.length === 0) return ctx.reply('📭 No messages found.');
 
-bot.command('clean', async (ctx) => {
-    if (!ADMINS.includes(ctx.from.id)) {
-        return ctx.reply('❌ You are not authorized to use this command.');
-    }
+            const formatted = data.map((row, i) => 
+                `#${i + 1} - ${row.username || 'Unknown'} (${row.user_id}):\n${row.message}`
+            ).join('\n\n');
 
-    const { data, error } = await supabase
-        .from('messages')
-        .delete()
-        .not('id', 'is', null)
-        .select();
+            return ctx.reply(`📝 Last 5 messages:\n\n${formatted}`);
+        }
+        case 'admin_clean': {
+            const { data, error } = await supabase
+                .from('messages')
+                .delete()
+                .not('id', 'is', null)
+                .select();
 
-    if (error) {
-        console.error("Supabase delete error:", error.message);
-        return ctx.reply('⚠️ Failed to clean the messages table.');
-    }
+            if (error) return ctx.reply('⚠️ Failed to clean the messages table.');
 
-    const deletedCount = data?.length || 0;
-    ctx.reply(`🧹 Successfully deleted ${deletedCount} message(s) from the table.`);
-});
-
-bot.command('fetch', async (ctx) => {
-    if (!ADMINS.includes(ctx.from.id)) {
-        return ctx.reply('❌ You are not authorized to use this command.');
-    }
-
-    const { data, error } = await supabase
-        .from('messages')
-        .select('user_id, username, message, created_at')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-    if (error) {
-        console.error("Supabase fetch error:", error.message);
-        return ctx.reply('⚠️ Failed to fetch messages.');
-    }
-
-    if (!data || data.length === 0) {
-        return ctx.reply('📭 No messages found.');
-    }
-
-    const formatted = data.map((row, i) => 
-        `#${i + 1} - ${row.username || 'Unknown'} (${row.user_id}):\n${row.message}`
-    ).join('\n\n');
-
-    ctx.reply(`📝 Last 5 messages:\n\n${formatted}`);
-});
-
-
-bot.command('ban', async (ctx) => {
-    if (!ADMINS.includes(ctx.from.id)) {
-        return ctx.reply('❌ You are not authorized to use this command.');
-    }
-
-    const parts = ctx.message.text.split(' ');
-    const targetId = parseInt(parts[1]);
-
-    if (isNaN(targetId)) {
-        return ctx.reply('⚠️ Usage: /ban <user_id>');
-    }
-
-    const { error } = await supabase
-        .from('blacklist')
-        .upsert([{ user_id: targetId }]);
-
-    if (error) {
-        console.error("Supabase ban error:", error.message);
-        return ctx.reply('❌ Failed to ban the user.');
-    }
-
-    ctx.reply(`✅ User ${targetId} has been banned.`);
-});
-
-bot.command('links', async (ctx) => {
-    if (!ADMINS.includes(ctx.from.id)) {
-        return ctx.reply('❌ You are not authorized to use this command.');
-    }
-
-    const messageText = `
+            const deletedCount = data?.length || 0;
+            return ctx.reply(`🧹 Successfully deleted ${deletedCount} message(s).`);
+        }
+        case 'admin_ban': {
+            ctx.session.mode = 'ban_waiting';
+            return ctx.reply('🚫 Please enter the user ID to ban:');
+        }
+        case 'admin_links': {
+            const messageText = `
 ברוכים הבאים לערוץ *Blue Jay Aviation* - קורת הגג של הטייסים הישראלים! ✈️
 
 בערוץ תוכלו לצפות בהודעות בצורה מסודרת ומרוכזת, כמו כן גם להיכנס לשאר הקבוצות הרלוונטיות.
@@ -160,120 +160,91 @@ bot.command('links', async (ctx) => {
 
 📌 *בחרו קבוצה להצטרפות מהכפתורים למטה:*
 `;
-
-    const CHANNEL_ID = parseInt(process.env.CHANNEL_ID);
-
-    await ctx.telegram.sendMessage(CHANNEL_ID, messageText, {
-        parse_mode: 'Markdown',
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: '🛋️ Lounge', url: 'https://t.me/+V2SBxQBz0Z9hOWQ0' }],
-                [{ text: '✈️ Commercial Aviation', url: 'https://t.me/+OszqxsBH8vY0NjBk' }],
-                [{ text: '🧑‍🏫 Flight Instructors', url: 'https://t.me/+swR-eigAntViN2I0' }],
-                [{ text: '👨‍✈️ Cadet Pilots', url: 'https://t.me/+8ynMfyN0zzZlNDlk' }]
-            ]
+            await ctx.telegram.sendMessage(parseInt(process.env.CHANNEL_ID), messageText, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '🛋️ Lounge', url: 'https://t.me/+V2SBxQBz0Z9hOWQ0' }],
+                        [{ text: '✈️ Commercial Aviation', url: 'https://t.me/+OszqxsBH8vY0NjBk' }],
+                        [{ text: '🧑‍🏫 Flight Instructors', url: 'https://t.me/+swR-eigAntViN2I0' }],
+                        [{ text: '👨‍✈️ Cadet Pilots', url: 'https://t.me/+8ynMfyN0zzZlNDlk' }]
+                    ]
+                }
+            });
+            return ctx.reply('✅ Links posted to the Blue Jay Aviation Channel!.');
         }
+    }
 });
 
-
-    ctx.reply('✅ Links posted to the Blue Jay Aviation Channel!.');
-});
-
-// --- Feedback Functionality --- 
-bot.command('feedback', async (ctx) => {
-  const feedback = ctx.message.text.split(' ').slice(1).join(' ').trim();
-
-  if (!feedback) {
-    return ctx.reply('❗ Please provide feedback after the command. Example:\n/feedback This bot is awesome!');
-  }
-
-  try {
-    const user = ctx.from;
-    const now = new Date();
-    const dateStr = now.toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem' });
-
-    const formattedFeedback = `📝 *New Feedback Received*
-
-👤 From: ${user.first_name} (${user.username ? '@' + user.username : 'No username'})
-🆔 ID: ${user.id}
-🕒 Date: ${dateStr}
-
-💬 "${feedback}"`;
-
-    await ctx.telegram.sendMessage(process.env.FEEDBACK_CHANNEL_ID, formattedFeedback, {
-      parse_mode: 'Markdown',
-    });
-
-    ctx.reply('✅ Thank you! Your feedback has been submitted.');
-  } catch (err) {
-    console.error('Error sending feedback:', err);
-    ctx.reply('⚠️ An error occurred while sending your feedback. Please try again later.');
-  }
-});
-
-// --- Start/help/filters ---
 bot.start(async ctx => {
-    return ctx.reply("Hi, this is *BJA Anonymous Messaging Bot*, which will anonymously forward your text to BJA. \nSimply start typing...\n\n⚠️ Warning: This bot is actively monitored. Misuse — including spam, offensive language, or abuse — will result in permanent removal and blocking of the user. Please use responsibly.", {
-        parse_mode: "Markdown",
-        reply_to_message_id: ctx.message?.message_id,
-        allow_sending_without_reply: true,
-        reply_markup: { force_reply: true, selective: true }
-    });
+    ctx.session = {}; // Reset mode
+    return ctx.reply(
+  '📋 Hi, this is *BJA Anonymous Messaging Bot*, which will anonymously forward your text to BJA.',
+  { ...getMainMenu(), parse_mode: 'Markdown' });    
 });
 
-bot.help((ctx) => ctx.reply('Send me any *textual* messages to forward 🙃.', { parse_mode: 'Markdown' }));
-bot.on(message('sticker'), (ctx) => {
-    if (ctx.message.chat.type !== 'private') return;
-    ctx.reply('Please use emoji 🙃');
-});
-
-// --- Message forwarding ---
 bot.on(message('text'), async (ctx) => {
     if (ctx.message.chat.type !== 'private') return;
 
     const enabled = await isBotEnabled();
-    if (!enabled) {
-        return ctx.reply('🛑 Bot is currently *disabled*.', { parse_mode: 'Markdown' });
-    }
+    if (!enabled) return ctx.reply('🛑 Bot is currently *disabled*.', { parse_mode: 'Markdown' });
 
+    const mode = ctx.session?.mode;
     const { id: user_id, username } = ctx.from;
-    const message = ctx.message.text;
+    const text = ctx.message.text?.trim();
 
-    // 🔒 Ban check BEFORE logging or forwarding
-    const { data: bannedUser, error: banCheckError } = await supabase
+    const { data: bannedUser } = await supabase
         .from('blacklist')
         .select('user_id')
         .eq('user_id', user_id)
         .maybeSingle();
 
-    if (banCheckError) {
-        console.error("Ban check failed:", banCheckError.message);
-        return ctx.reply('⚠️ Error checking access. Please try again later.');
+    if (bannedUser) return ctx.reply('🚫 You are banned from using this bot.');
+
+    if (mode === 'anon') {
+        await supabase.from('messages').insert([{ user_id, username, message: text }]);
+        await ctx.telegram.sendMessage(process.env.GROUP_ID, text, {
+            message_thread_id: TOPIC_ID
+        });
+        ctx.session.mode = null;
+        return ctx.reply('✅ Your message has been sent anonymously.');
     }
 
-    if (bannedUser) {
-        return ctx.reply('🚫 You are banned from using this bot.');
+    if (mode === 'feedback') {
+        const now = new Date();
+        const dateStr = now.toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem' });
+        const escapeMarkdownV2 = (text) => {
+            return text.replace(/([_*\[\]()~`>#+=|{}.!\\-])/g, '\\$1');
+        };
+
+        const safeFeedback = escapeMarkdownV2(text);
+        const safeName = escapeMarkdownV2(ctx.from.first_name || '');
+        const safeUsername = escapeMarkdownV2(ctx.from.username || '');
+        const safeDate = escapeMarkdownV2(dateStr);
+        const user_id = ctx.from.id;
+
+        const formattedFeedback = `📝 *New Feedback Received*\n\n👤 From: ${safeName} \\(@${safeUsername}\\)\n🆔 ID: ${user_id}\n🕒 Date: ${safeDate}\n\n💬 ${safeFeedback}`;
+
+        await ctx.telegram.sendMessage(FEEDBACK_CHANNEL_ID, formattedFeedback, {
+            parse_mode: 'MarkdownV2'
+        });
+
+        ctx.session.mode = null;
+        return ctx.reply('✅ Thank you! Your feedback has been submitted.');
     }
 
-    // 1. Log to Supabase
-    const { error } = await supabase
-        .from('messages')
-        .insert([{ user_id, username, message }]);
+    if (mode === 'ban_waiting' && ADMINS.includes(user_id)) {
+        const targetId = parseInt(text);
+        if (isNaN(targetId)) return ctx.reply('⚠️ Invalid ID. Please send a valid numeric user ID.');
 
-    if (error) {
-        console.error("Supabase insert error:", error.message);
-        return ctx.reply('⚠️ Failed to log your message. Please try again later.');
+        await supabase.from('blacklist').upsert([{ user_id: targetId }]);
+        ctx.session.mode = null;
+        return ctx.reply(`✅ User ${targetId} has been banned.`);
     }
 
-    // 2. Acknowledge + forward
-    ctx.reply('Your message has been sent to BJA. Have a great day! 🙃\n\nWe’d love to hear your thoughts — feel free to send us feedback anytime using:\n/feedback <your message>');
-    return ctx.telegram.sendMessage(process.env.GROUP_ID, message, {
-        message_thread_id: TOPIC_ID
-    });
+    ctx.reply('Please choose an option from the menu to proceed:', getMainMenu());
 });
 
-
-// --- Reject non-text messages ---
 const rejectMedia = async (ctx) => {
     if (ctx.message.chat.type !== 'private') return;
     ctx.reply('Please send textual messages only!');
@@ -288,13 +259,11 @@ bot.on(message('animation'), rejectMedia);
 bot.on(message('contact'), rejectMedia);
 bot.on(message('location'), rejectMedia);
 
-// --- Graceful stop ---
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
 console.log('Bot is running');
 
-// --- Netlify or Render function handler ---
 exports.bot = bot;
 exports.handler = async event => {
     try {
