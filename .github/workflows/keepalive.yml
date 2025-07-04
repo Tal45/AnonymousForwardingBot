@@ -1,0 +1,18 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # every day at 5:00 UTC
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Query status table from Supabase
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" \
+            "https://vaxdocqgvdwuqewykhut.supabase.co/rest/v1/status?key=eq.enabled" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
