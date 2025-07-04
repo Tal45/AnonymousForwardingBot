@@ -2,7 +2,7 @@ name: Supabase Keep-Alive
 
 on:
   schedule:
-    - cron: '0 5 * * *'  # every day at 5:00 UTC
+    - cron: '38 17 * * *'  # every day at 5:00 UTC
   workflow_dispatch:
 
 jobs:
