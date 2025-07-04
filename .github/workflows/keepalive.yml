@@ -1,9 +1,9 @@
 name: Supabase Keep-Alive
 
 on:
-  schedule:
-    - cron: '40 14 * * *'  # every day at 5:00 UTC
   workflow_dispatch:
+  schedule:
+    - cron: '45 14 * * *'
 
 jobs:
   ping:
